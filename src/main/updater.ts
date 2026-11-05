@@ -5,23 +5,30 @@ import { app, dialog, shell } from "electron";
 import { autoUpdater, type UpdateInfo } from "electron-updater";
 
 import type { CallSignals } from "./calls";
+import { downloadMacUpdate, installable, installMacUpdate } from "./mac-update";
 import { updateMode } from "./policy";
 
 const EVERY_4_HOURS = 4 * 60 * 60 * 1000;
 
 /**
  * New versions from the GitHub releases of JupiterSells/onsell-oncall-desktop
- * (the feed electron-builder writes into the app as `app-update.yml`).
+ * (the feed electron-builder writes into the app as `app-update.yml`),
+ * checked at start and every four hours.
  *
- * Windows downloads in the background and installs on the next restart, or
- * at once if the person says so; never in the middle of a call, which a
- * restart would end. An unsigned macOS build cannot replace itself, so there
- * the app says a version is out and opens OnCall's download page.
+ * Every version downloads in the background and installs on the next quit,
+ * or at once from «Repornește acum»; never in the middle of a call, which a
+ * restart would end. Windows (and a signed Mac) use electron-updater's
+ * installer; an unsigned Mac replaces its own bundle (mac-update.ts). A Mac
+ * app that cannot write where it lives (the DMG, a non-admin account) says
+ * why and opens OnCall's download page instead.
  */
 export class Updates {
   private readonly mode = updateMode(process.platform, signedMac());
   private announced = new Set<string>();
   private waitingForCallEnd: (() => void) | null = null;
+  /** Unsigned Mac: the version downloaded and unpacked, waiting for a quit or a restart. */
+  private macReady: { version: string; bundle: string } | null = null;
+  private macDownloading: string | null = null;
 
   constructor(
     private readonly options: {
@@ -37,10 +44,16 @@ export class Updates {
     autoUpdater.autoDownload = this.mode === "install";
     autoUpdater.autoInstallOnAppQuit = this.mode === "install";
     autoUpdater.on("update-available", (info) => {
-      if (this.mode === "notify") void this.offerDownload(info);
+      if (this.mode === "replace") void this.downloadForMac(info);
     });
     autoUpdater.on("update-downloaded", (info) => this.offerRestart(info));
     autoUpdater.on("error", (error) => console.error("[updates]", error.message));
+    // An ordinary quit installs what is waiting, as Windows does; the new version is there next time.
+    app.on("will-quit", () => {
+      const ready = this.macReady;
+      this.macReady = null;
+      if (ready) installMacUpdate(ready.bundle, false);
+    });
     setTimeout(() => void this.check(false), 10_000);
     setInterval(() => void this.check(false), EVERY_4_HOURS);
   }
@@ -56,6 +69,8 @@ export class Updates {
       const result = await autoUpdater.checkForUpdates();
       if (manual && !result?.isUpdateAvailable) {
         void dialog.showMessageBox({ message: "OnCall este la zi.", detail: `Versiunea ${app.getVersion()} este cea mai nouă.` });
+      } else if (manual && this.mode === "replace" && this.macReady && result?.updateInfo.version === this.macReady.version) {
+        this.offerRestart(result.updateInfo);
       }
     } catch (error) {
       console.error("[updates]", error);
@@ -63,13 +78,28 @@ export class Updates {
     }
   }
 
-  private async offerDownload(info: UpdateInfo): Promise<void> {
+  private async downloadForMac(info: UpdateInfo): Promise<void> {
+    if (this.macReady?.version === info.version || this.macDownloading === info.version) return;
+    const refusal = installable();
+    if (refusal) return void this.offerDownloadPage(info, refusal);
+    this.macDownloading = info.version;
+    try {
+      this.macReady = { version: info.version, bundle: await downloadMacUpdate(info) };
+      this.offerRestart(info);
+    } catch (error) {
+      console.error("[updates]", error);
+    } finally {
+      this.macDownloading = null;
+    }
+  }
+
+  private async offerDownloadPage(info: UpdateInfo, why: string): Promise<void> {
     if (this.announced.has(info.version)) return;
     this.announced.add(info.version);
     const { response } = await dialog.showMessageBox({
       type: "info",
       message: `Este disponibilă versiunea ${info.version} a aplicației OnCall.`,
-      detail: `Ai versiunea ${app.getVersion()}. Descarc-o din OnCall și înlocuiește aplicația din Applications.`,
+      detail: `Ai versiunea ${app.getVersion()}. ${why}`,
       buttons: ["Descarcă", "Mai târziu"],
       defaultId: 0,
       cancelId: 1,
@@ -104,7 +134,12 @@ export class Updates {
       .then(({ response }) => {
         if (response !== 0 || this.options.calls.inCall) return;
         this.options.beforeInstall();
-        autoUpdater.quitAndInstall();
+        if (this.mode === "install") return autoUpdater.quitAndInstall();
+        const ready = this.macReady;
+        this.macReady = null;
+        if (!ready) return;
+        installMacUpdate(ready.bundle, true);
+        app.quit();
       });
   }
 }

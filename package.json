@@ -1,7 +1,7 @@
 {
   "name": "onsell-oncall-desktop",
   "productName": "OnCall",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "OnCall for Windows and macOS: OnSell's call-center app (call.onsell.ro) in its own window.",
   "author": "OnSell <dev@onsell.ro>",

@@ -91,9 +91,9 @@ describe("updateMode", () => {
     expect(updateMode("win32", false)).toBe("install");
   });
 
-  it("installs on a signed Mac build and only notifies on an unsigned one", () => {
+  it("installs on a signed Mac build and replaces its own bundle on an unsigned one", () => {
     expect(updateMode("darwin", true)).toBe("install");
-    expect(updateMode("darwin", false)).toBe("notify");
+    expect(updateMode("darwin", false)).toBe("replace");
   });
 });
 

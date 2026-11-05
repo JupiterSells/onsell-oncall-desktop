@@ -87,18 +87,17 @@ export function restoreBounds(saved: unknown, workAreas: Rect[]): WindowState | 
 }
 
 /**
- * How a new version arrives.
+ * How a new version arrives. Either way it is downloaded in the background
+ * and installed on the next restart, or at once if the person says so.
  *
- * - `install`: downloaded in the background, installed on restart (Windows;
- *   macOS once the build is signed with a Developer ID, which Squirrel.Mac
- *   requires).
- * - `notify`: the app says a version is out and opens OnCall's download page
- *   (an unsigned macOS build cannot replace itself).
+ * - `install`: electron-updater's own (Windows; macOS once the build is
+ *   signed with a Developer ID, which Squirrel.Mac requires).
+ * - `replace`: an unsigned macOS build swaps its own bundle (mac-update.ts).
  */
-export type UpdateMode = "install" | "notify";
+export type UpdateMode = "install" | "replace";
 
 export function updateMode(platform: NodeJS.Platform, signedMac: boolean): UpdateMode {
-  if (platform === "darwin") return signedMac ? "install" : "notify";
+  if (platform === "darwin" && !signedMac) return "replace";
   return "install";
 }
 

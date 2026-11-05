@@ -31,7 +31,8 @@ From OnCall: **call.onsell.ro/aplicatie** (also linked from the sign-in page and
 - `src/main/calls.ts`: what happens when a call rings or is up.
 - `src/main/widget.ts`: the call widget, a small always-on-top window showing the web app's `/widget/apel` while OnCall's window is not focused. The call comes from the Pupitru's softphone (`callUpdate`), the buttons go back to it (`command` → `onCommand`); the widget has no phone of its own.
 - `src/preload/preload.ts`: `window.oncallDesktop` (`version`, `platform`, `ringing(label|null)`, `callActive(bool)`; from 1.1 `callUpdate`, `onCommand`, `onCallUpdate`, `command` for the widget), given only to OnCall's own pages, and each message accepted only from the window it belongs to. The web app uses it from `src/lib/desktop.ts` and `src/softphone/desktop-bridge.tsx`.
-- `src/main/updater.ts`: electron-updater on this repo's GitHub releases.
+- `src/main/updater.ts`: updates from this repo's GitHub releases: downloaded in the background, installed on quit or «Repornește acum», never during a call.
+- `src/main/mac-update.ts`: the unsigned Mac's own updater (Squirrel.Mac installs only Developer ID-signed updates): the release zip, checked against the SHA-512 in `latest-mac.yml`, swapped into place by a script once the app exits.
 
 ## Develop
 
@@ -60,7 +61,7 @@ The tag starts `.github/workflows/release.yml`: tests, a draft release, the macO
 
 The builds are **not signed yet**. Until they are:
 
-- **macOS**: the first open is refused by Gatekeeper. Right-click the app in Applications → Open, or System Settings → Privacy & Security → «Open Anyway». A new version is announced in the app, which opens the download page; it cannot replace itself.
+- **macOS**: the first open is refused by Gatekeeper. Right-click the app in Applications → Open, or System Settings → Privacy & Security → «Open Anyway». After that it updates itself (mac-update.ts) as long as it runs from a folder the account can write (Applications on an admin account); otherwise it says why and opens the download page. macOS may ask for the microphone again after an update, since an ad-hoc signature changes with every build.
 - **Windows**: SmartScreen says «Windows protected your PC» → More info → Run anyway. Updates install themselves.
 
 Signing turns on by adding the repo secrets listed at the top of `release.yml` (an Apple Developer ID Application certificate plus notarisation credentials; a Windows code-signing certificate). Nothing else changes: the next tag is signed, and signed Macs update themselves.
