@@ -108,3 +108,59 @@ export function ringLabel(value: unknown): string | null {
   const clean = value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
   return clean ? clean.slice(0, 120) : null;
 }
+
+/** The call widget's window (widget.ts): small enough to sit in a corner over other work. */
+export const WIDGET_SIZE = { width: 340, height: 148 } as const;
+
+/**
+ * Where the widget opens: where the operator last dragged it, if a display
+ * still holds all of it; otherwise the top right corner of the primary
+ * display, under the menu bar.
+ */
+export function widgetPosition(saved: unknown, workAreas: Rect[], primary: Rect): { x: number; y: number } {
+  const corner = { x: primary.x + primary.width - WIDGET_SIZE.width - 16, y: primary.y + 16 };
+  if (!saved || typeof saved !== "object") return corner;
+  const { x, y } = saved as { x?: unknown; y?: unknown };
+  if (typeof x !== "number" || typeof y !== "number" || !Number.isFinite(x) || !Number.isFinite(y)) return corner;
+  const fits = workAreas.some(
+    (a) => x >= a.x && y >= a.y && x + WIDGET_SIZE.width <= a.x + a.width && y + WIDGET_SIZE.height <= a.y + a.height,
+  );
+  return fits ? { x: Math.round(x), y: Math.round(y) } : corner;
+}
+
+/** What the call widget shows; the web app's `WidgetCall` (src/lib/desktop.ts in onsell-oncall-web). */
+export interface WidgetCall {
+  phase: "incoming" | "dialing" | "ringing" | "in_call" | "ended" | "wrap";
+  title: string;
+  number: string | null;
+  detail: string | null;
+  answeredAt: number | null;
+  muted: boolean;
+  held: boolean;
+}
+
+const PHASES = new Set<WidgetCall["phase"]>(["incoming", "dialing", "ringing", "in_call", "ended", "wrap"]);
+
+/** The page's call as the widget may get it: known phases, bounded one-line texts, nothing else carried over. Null for anything else. */
+export function widgetCall(value: unknown): WidgetCall | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  if (typeof v.phase !== "string" || !PHASES.has(v.phase as WidgetCall["phase"])) return null;
+  const text = (s: unknown) => ringLabel(s);
+  return {
+    phase: v.phase as WidgetCall["phase"],
+    title: text(v.title) ?? "Apel",
+    number: text(v.number),
+    detail: text(v.detail),
+    answeredAt: typeof v.answeredAt === "number" && Number.isFinite(v.answeredAt) ? v.answeredAt : null,
+    muted: v.muted === true,
+    held: v.held === true,
+  };
+}
+
+/** The widget's buttons, as the web app's softphone takes them. */
+export type WidgetCommand = "answer" | "hangup" | "mute" | "hold" | "open";
+
+export function widgetCommand(value: unknown): WidgetCommand | null {
+  return value === "answer" || value === "hangup" || value === "mute" || value === "hold" || value === "open" ? value : null;
+}

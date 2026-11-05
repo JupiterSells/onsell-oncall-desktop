@@ -6,9 +6,10 @@ import { app, Notification, powerSaveBlocker, type BrowserWindow } from "electro
  *
  * - **A call rings**: the web app already plays the tone and blinks the tab
  *   title (Voxbee guide §11.5). On a desktop the window may be minimised or
- *   behind another app, so it also comes to the front, the taskbar button
- *   flashes (Windows) or the Dock icon bounces (macOS), and a notification
- *   names the caller.
+ *   behind another app, so the call widget shows the call over it (widget.ts)
+ *   or, with a web app older than the widget, the window comes to the front;
+ *   the taskbar button flashes (Windows) or the Dock icon bounces (macOS),
+ *   and a notification names the caller.
  * - **A call is up**: the computer does not go to sleep under it, and
  *   quitting or reloading asks first, since either ends the call.
  *
@@ -21,7 +22,11 @@ export class CallSignals {
   private blocker: number | null = null;
   private listeners = new Set<() => void>();
 
-  constructor(private readonly window: () => BrowserWindow | null) {}
+  constructor(
+    private readonly window: () => BrowserWindow | null,
+    /** False while the call widget will show the ring: the operator's work is not covered by OnCall's whole window then. */
+    private readonly summonOnRing: () => boolean,
+  ) {}
 
   get inCall(): boolean {
     return this.blocker !== null;
@@ -40,7 +45,10 @@ export class CallSignals {
     if (!label) return;
 
     const win = this.window();
-    if (win && !win.isFocused()) summon(win);
+    if (win && !win.isFocused()) {
+      if (this.summonOnRing()) summon(win);
+      else if (process.platform === "win32") win.flashFrame(true);
+    }
     if (process.platform === "darwin") app.dock?.bounce("critical");
 
     if (Notification.isSupported()) {

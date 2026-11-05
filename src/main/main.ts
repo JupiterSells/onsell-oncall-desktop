@@ -3,9 +3,10 @@ import { app, BrowserWindow, dialog, ipcMain, powerMonitor, session, type IpcMai
 import { CallSignals, summon } from "./calls";
 import { installMenu } from "./menu";
 import { installPermissions } from "./permissions";
-import { appOriginOf, classify, DEFAULT_APP_URL, ringLabel } from "./policy";
+import { appOriginOf, classify, DEFAULT_APP_URL, ringLabel, widgetCall, widgetCommand } from "./policy";
 import { installTray } from "./tray";
 import { Updates } from "./updater";
+import { CallWidget } from "./widget";
 import { createMainWindow, guardContents, PARTITION } from "./window";
 
 /**
@@ -23,9 +24,12 @@ const DOWNLOAD_PAGE = `${APP_ORIGIN}/aplicatie`;
 
 let mainWindow: BrowserWindow | null = null;
 let quitting = false;
-const calls = new CallSignals(() => mainWindow);
+const widget = new CallWidget({ url: `${APP_ORIGIN}/widget/apel`, main: () => mainWindow });
+const calls = new CallSignals(() => mainWindow, () => !widget.available);
 
 app.setAppUserModelId("ro.onsell.oncall");
+// A developer's run against another OnCall keeps its own sign-in and lock, apart from the installed app's.
+if (APP_URL !== DEFAULT_APP_URL) app.setPath("userData", `${app.getPath("userData")}-dev`);
 
 if (!app.requestSingleInstanceLock()) {
   // OnCall is already open: that one comes to the front (second-instance below), this one leaves.
@@ -52,11 +56,33 @@ function start(): void {
   ipcMain.on("oncall:call", (event, active: unknown) => {
     if (fromOncall(event)) calls.setInCall(active === true);
   });
+  // The call widget: the call from the main window's softphone, the buttons from the widget, each only from its own window.
+  ipcMain.on("oncall:call-update", (event, state: unknown) => {
+    if (fromOncall(event) && event.sender === mainWindow?.webContents) widget.update(widgetCall(state));
+  });
+  ipcMain.on("oncall:widget-ready", (event) => {
+    if (fromOncall(event) && widget.owns(event.sender)) widget.ready();
+  });
+  ipcMain.on("oncall:widget-command", (event, value: unknown) => {
+    const command = widgetCommand(value);
+    if (!command || !fromOncall(event) || !widget.owns(event.sender)) return;
+    if (command === "open") show();
+    mainWindow?.webContents.send("oncall:command", command);
+  });
 
   const updates = new Updates({ calls, downloadPage: DOWNLOAD_PAGE, beforeInstall: () => (quitting = true) });
   const checkForUpdates = () => void updates.check(true);
 
-  mainWindow = createMainWindow({ appUrl: APP_URL, appOrigin: APP_ORIGIN, quitting: () => quitting, onPageReplaced: () => calls.reset() });
+  mainWindow = createMainWindow({
+    appUrl: APP_URL,
+    appOrigin: APP_ORIGIN,
+    quitting: () => quitting,
+    onPageReplaced: () => {
+      calls.reset();
+      widget.reset();
+    },
+  });
+  for (const change of ["focus", "blur", "show", "hide", "minimize", "restore"] as const) mainWindow.on(change as "focus", () => widget.refresh());
   installMenu({ window: () => mainWindow, calls, home: `${APP_ORIGIN}/`, downloadPage: DOWNLOAD_PAGE, checkForUpdates });
   installTray({ show, checkForUpdates, calls });
   updates.start();

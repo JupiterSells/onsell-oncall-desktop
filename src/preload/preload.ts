@@ -25,6 +25,27 @@ if (hello) {
       callActive(active: boolean): void {
         ipcRenderer.send("oncall:call", active === true);
       },
+      /** The softphone's call for the call widget, or null (main window only; the app checks). */
+      callUpdate(state: unknown): void {
+        ipcRenderer.send("oncall:call-update", state);
+      },
+      /** The widget's buttons, for the softphone to act on. Returns the way to stop listening. */
+      onCommand(handler: (command: string) => void): () => void {
+        const listener = (_event: unknown, command: string) => handler(command);
+        ipcRenderer.on("oncall:command", listener);
+        return () => ipcRenderer.removeListener("oncall:command", listener);
+      },
+      /** The call widget's page: the call as it changes, starting with the one there is now. */
+      onCallUpdate(handler: (state: unknown) => void): () => void {
+        const listener = (_event: unknown, state: unknown) => handler(state);
+        ipcRenderer.on("oncall:call-state", listener);
+        ipcRenderer.send("oncall:widget-ready");
+        return () => ipcRenderer.removeListener("oncall:call-state", listener);
+      },
+      /** The call widget's page: a button, for the softphone in the main window. */
+      command(command: string): void {
+        ipcRenderer.send("oncall:widget-command", command);
+      },
     }),
   );
 }

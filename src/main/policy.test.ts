@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appOriginOf, classify, restoreBounds, ringLabel, updateMode } from "./policy";
+import { appOriginOf, classify, restoreBounds, ringLabel, updateMode, widgetCall, widgetCommand, widgetPosition } from "./policy";
 
 const ORIGIN = "https://call.onsell.ro";
 
@@ -108,5 +108,46 @@ describe("ringLabel", () => {
     expect(ringLabel(null)).toBeNull();
     expect(ringLabel("  ")).toBeNull();
     expect(ringLabel(42)).toBeNull();
+  });
+});
+
+describe("widgetPosition", () => {
+  const laptop = { x: 0, y: 25, width: 1512, height: 920 };
+
+  it("opens in the top right corner the first time", () => {
+    expect(widgetPosition(null, [laptop], laptop)).toEqual({ x: 1512 - 340 - 16, y: 41 });
+  });
+
+  it("goes back where it was dragged, if it still fits on a display", () => {
+    expect(widgetPosition({ x: 20, y: 700 }, [laptop], laptop)).toEqual({ x: 20, y: 700 });
+    expect(widgetPosition({ x: 1400, y: 700 }, [laptop], laptop)).toEqual({ x: 1156, y: 41 });
+    expect(widgetPosition({ x: "a" }, [laptop], laptop)).toEqual({ x: 1156, y: 41 });
+  });
+});
+
+describe("widgetCall", () => {
+  const call = { phase: "in_call", title: "Casa Bună", number: "0736 462 968", detail: null, answeredAt: 5, muted: true, held: false };
+
+  it("passes a call through", () => {
+    expect(widgetCall(call)).toEqual(call);
+  });
+
+  it("keeps only what the widget shows, bounded", () => {
+    expect(widgetCall({ ...call, title: "x".repeat(300), extra: "<script>", muted: "yes" })).toEqual({ ...call, title: "x".repeat(120), muted: false });
+  });
+
+  it("refuses an unknown phase or anything that is not a call", () => {
+    expect(widgetCall({ ...call, phase: "hacked" })).toBeNull();
+    expect(widgetCall(null)).toBeNull();
+    expect(widgetCall("in_call")).toBeNull();
+  });
+});
+
+describe("widgetCommand", () => {
+  it("knows the widget's buttons only", () => {
+    expect(widgetCommand("answer")).toBe("answer");
+    expect(widgetCommand("open")).toBe("open");
+    expect(widgetCommand("dial")).toBeNull();
+    expect(widgetCommand(undefined)).toBeNull();
   });
 });

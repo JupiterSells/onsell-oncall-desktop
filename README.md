@@ -6,7 +6,8 @@ Every screen, role and rule is the web app's (`JupiterSells/onsell-oncall-web`),
 
 | | Browser tab | App |
 |---|---|---|
-| Incoming call while minimised or behind another app | tone + blinking tab title | window to the front, taskbar flash / Dock bounce, notification with the caller |
+| Incoming call while minimised or behind another app | tone + blinking tab title | the call widget over other apps with «Răspunde», taskbar flash / Dock bounce, notification with the caller |
+| A call while OnCall is not in front | — | the call widget: caller, shop, timer, mute, hold, hang up, back to the Pupitru; a result still owed stays on it |
 | Ring before anyone clicked the page | may be silent | always heard |
 | Softphone in a background tab | throttled | runs at full speed |
 | Computer during a call | may sleep | kept awake until the call ends |
@@ -28,7 +29,8 @@ From OnCall: **call.onsell.ro/aplicatie** (also linked from the sign-in page and
 - `src/main/window.ts`: the window, its security settings (sandboxed, isolated, no Node in the page), the link rules, the context menu, the offline page.
 - `src/main/permissions.ts`: OnCall's pages get the microphone (audio only), notifications, clipboard write and full screen; everything else and everyone else is refused.
 - `src/main/calls.ts`: what happens when a call rings or is up.
-- `src/preload/preload.ts`: `window.oncallDesktop` (`version`, `platform`, `ringing(label|null)`, `callActive(bool)`), given only to OnCall's own pages. The web app uses it from `src/lib/desktop.ts`.
+- `src/main/widget.ts`: the call widget, a small always-on-top window showing the web app's `/widget/apel` while OnCall's window is not focused. The call comes from the Pupitru's softphone (`callUpdate`), the buttons go back to it (`command` → `onCommand`); the widget has no phone of its own.
+- `src/preload/preload.ts`: `window.oncallDesktop` (`version`, `platform`, `ringing(label|null)`, `callActive(bool)`; from 1.1 `callUpdate`, `onCommand`, `onCallUpdate`, `command` for the widget), given only to OnCall's own pages, and each message accepted only from the window it belongs to. The web app uses it from `src/lib/desktop.ts` and `src/softphone/desktop-bridge.tsx`.
 - `src/main/updater.ts`: electron-updater on this repo's GitHub releases.
 
 ## Develop
@@ -41,7 +43,7 @@ npm test && npm run typecheck
 npm run dist:mac                       # local, unsigned, into release/
 ```
 
-`ONCALL_URL` is ignored by packaged builds. Started from VS Code's terminal, unset `ELECTRON_RUN_AS_NODE` first (`env -u ELECTRON_RUN_AS_NODE npm start`), or Electron runs as plain Node.
+`ONCALL_URL` is ignored by packaged builds; a run with it keeps its own profile (`OnCall-dev`), apart from the installed app's sign-in. Started from VS Code's terminal, unset `ELECTRON_RUN_AS_NODE` first (`env -u ELECTRON_RUN_AS_NODE npm start`), or Electron runs as plain Node.
 
 Icons are drawn from the OnCall mark by `npm run icons` (writes `build/icon.png` and `static/*.png`; commit them).
 
