@@ -1,0 +1,30 @@
+{
+  "name": "onsell-oncall-desktop",
+  "productName": "OnCall",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OnCall for Windows and macOS: OnSell's call-center app (call.onsell.ro) in its own window.",
+  "author": "OnSell <dev@onsell.ro>",
+  "homepage": "https://call.onsell.ro/aplicatie",
+  "license": "UNLICENSED",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "icons": "electron tools/make-icons.cjs",
+    "dist:mac": "npm run build && electron-builder --mac -c.mac.identity=- -c.mac.hardenedRuntime=false --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "electron": "45.2.3",
+    "electron-builder": "26.18.1",
+    "typescript": "^5",
+    "vitest": "^3.2.7"
+  }
+}

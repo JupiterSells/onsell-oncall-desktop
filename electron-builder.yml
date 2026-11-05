@@ -1,0 +1,66 @@
+# The installers, and the update feed electron-updater reads.
+#
+# File names carry no version, so OnCall's download page can link
+# https://github.com/JupiterSells/onsell-oncall-desktop/releases/latest/download/<name>
+# and always get the newest release without asking GitHub's API.
+appId: ro.onsell.oncall
+productName: OnCall
+copyright: Copyright © OnSell
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - static/**/*
+  - package.json
+publish:
+  provider: github
+  owner: JupiterSells
+  repo: onsell-oncall-desktop
+  # The release workflow opens a draft, both platforms upload to it, and it is published once both are there.
+  releaseType: draft
+
+mac:
+  category: public.app-category.business
+  target:
+    # One download for every Mac (Apple silicon and Intel). The zip is what an update installs.
+    - target: dmg
+      arch: universal
+    - target: zip
+      arch: universal
+  artifactName: OnCall-mac.${ext}
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSMicrophoneUsageDescription: OnCall folosește microfonul pentru apelurile cu clienții.
+    NSCameraUsageDescription: OnCall nu folosește camera.
+dmg:
+  title: OnCall
+  artifactName: OnCall-mac.${ext}
+
+win:
+  target:
+    - target: nsis
+      arch: x64
+  artifactName: OnCall-Setup.${ext}
+nsis:
+  # Installs for the person, with no administrator prompt, and opens when done.
+  oneClick: true
+  perMachine: false
+  runAfterFinish: true
+  createDesktopShortcut: always
+  shortcutName: OnCall
+  deleteAppDataOnUninstall: false
+
+# The packaged app is OnCall's window and nothing else: it cannot be started
+# as a plain Node.js or have code put into it from the command line or the
+# environment, and it loads only its own, unaltered app.asar.
+# (Cookie encryption waits for a signed macOS build: on an ad-hoc signed one
+# the Keychain would ask for access again after every update.)
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true

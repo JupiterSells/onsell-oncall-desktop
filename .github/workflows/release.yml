@@ -1,0 +1,106 @@
+name: Release
+
+# A tag v<version> (the package.json version) builds the installers and
+# publishes them as a GitHub release. That release is both what OnCall's
+# download page (call.onsell.ro/aplicatie) links to and the feed the
+# installed apps update from.
+#
+#   npm version patch && git push --follow-tags
+#
+# Signing is optional and switched on by the secrets alone:
+# - macOS: MAC_CSC_LINK (Developer ID Application .p12, base64),
+#   MAC_CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID.
+#   With all of them the build is signed and notarised and updates itself;
+#   without, it is ad-hoc signed and the app offers the download page instead.
+# - Windows: WIN_CSC_LINK (.pfx, base64), WIN_CSC_KEY_PASSWORD.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit -p tsconfig.json
+      - run: npx vitest run
+      # The version the app reports and the update feed compares is package.json's; a tag that says otherwise is a typo.
+      - name: The tag is the package's version
+        run: test "$GITHUB_REF_NAME" = "v$(node -p 'require("./package.json").version')"
+
+  draft:
+    needs: gate
+    runs-on: ubuntu-latest
+    steps:
+      # Opened once, before both builds upload to it: two builds opening it at the same time make two releases.
+      - run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft --title "OnCall ${GITHUB_REF_NAME#v}" --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    needs: draft
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+          - os: windows-latest
+            platform: win
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Package and upload to the draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          args=(--${{ matrix.platform }} --publish always)
+          if [ "${{ matrix.platform }}" = mac ]; then
+            if [ -n "$MAC_CSC_LINK" ] && [ -n "$APPLE_ID" ]; then
+              export CSC_LINK="$MAC_CSC_LINK" CSC_KEY_PASSWORD="$MAC_CSC_KEY_PASSWORD"
+              args+=(-c.mac.notarize=true -c.extraMetadata.oncallSignedMac=true)
+            else
+              # Ad-hoc: Apple silicon runs nothing unsigned, and without a Team ID the hardened runtime refuses Electron's own frameworks.
+              export CSC_IDENTITY_AUTO_DISCOVERY=false
+              args+=(-c.mac.identity=- -c.mac.hardenedRuntime=false)
+            fi
+          elif [ -n "$WIN_CSC_LINK" ]; then
+            export CSC_LINK="$WIN_CSC_LINK" CSC_KEY_PASSWORD="$WIN_CSC_KEY_PASSWORD"
+          fi
+          npx electron-builder "${args[@]}"
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      # Only now, with both platforms' files on it: the download page's /releases/latest links and the update feed see it from here.
+      - run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

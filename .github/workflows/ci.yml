@@ -1,0 +1,23 @@
+name: CI
+
+# Every push and pull request: the types and the rules' tests. Installers are
+# built only for a release tag (release.yml).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit -p tsconfig.json
+      - run: npx vitest run

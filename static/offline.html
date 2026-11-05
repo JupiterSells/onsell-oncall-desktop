@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ro">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>OnCall · fără conexiune</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --crimson: #b8173a;
+        --ink: #17181c;
+        --slate: #6b6f7a;
+        --line: #e4e5e9;
+        --panel: #f6f6f8;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--panel);
+        color: var(--ink);
+        font: 14px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif;
+      }
+      main {
+        width: min(420px, calc(100vw - 32px));
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 32px;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 20px;
+      }
+      p {
+        margin: 0 0 18px;
+        color: var(--slate);
+      }
+      button {
+        width: 100%;
+        height: 46px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--crimson);
+        color: #fff;
+        font: 600 15px/1 inherit;
+        cursor: pointer;
+      }
+      small {
+        display: block;
+        margin-top: 12px;
+        color: var(--slate);
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>OnCall nu se poate încărca</h1>
+      <p>Nu există conexiune la internet sau call.onsell.ro nu răspunde acum. Apelurile nu pot porni până nu revine conexiunea.</p>
+      <button id="retry" type="button">Reîncearcă</button>
+      <small id="next"></small>
+    </main>
+    <script>
+      // The page that failed; main.ts only ever passes OnCall's or its sign-in's, and navigation is guarded again there.
+      const target = new URLSearchParams(location.search).get("url") || "https://call.onsell.ro/";
+      const retry = () => location.replace(target);
+      document.getElementById("retry").addEventListener("click", retry);
+      let left = 15;
+      const next = document.getElementById("next");
+      const tick = () => {
+        next.textContent = `Încerc din nou în ${left} s`;
+        if (left-- <= 0) retry();
+        else setTimeout(tick, 1000);
+      };
+      tick();
+      window.addEventListener("online", retry);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,19 @@
+# Without the trailing slash too: a `node_modules/` pattern matches directories
+# only, so the symlink a git worktree gets instead of its own install shows up
+# as untracked and the tree reports dirt forever.
+node_modules
+node_modules/
+
+dist/
+release/
+*.tsbuildinfo
+
+.env
+.env*.local
+
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.log
