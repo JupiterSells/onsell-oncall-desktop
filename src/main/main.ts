@@ -116,7 +116,9 @@ function show(): void {
 
 /** The chat notification; a click brings the main window (never the call widget) to the front, on the thread. */
 function notifyMessage(label: string | null, threadId: string | null): void {
-  if (!label || !threadId || BrowserWindow.getFocusedWindow() !== null) return;
+  if (!label || !threadId) return;
+  // «In front» means the main window itself, as the call widget counts it: a focused widget is not OnCall's page.
+  if (mainWindow && mainWindow.isVisible() && !mainWindow.isMinimized() && mainWindow.isFocused()) return;
   if (process.platform === "win32") mainWindow?.flashFrame(true);
   if (process.platform === "darwin") app.dock?.bounce("informational");
   if (!Notification.isSupported()) return;
