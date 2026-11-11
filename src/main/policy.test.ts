@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appOriginOf, classify, restoreBounds, ringLabel, updateMode, widgetCall, widgetCommand, widgetPosition } from "./policy";
+import { appOriginOf, classify, messageLabel, restoreBounds, ringLabel, threadIdOf, updateMode, widgetCall, widgetCommand, widgetPosition } from "./policy";
 
 const ORIGIN = "https://call.onsell.ro";
 
@@ -149,5 +149,40 @@ describe("widgetCommand", () => {
     expect(widgetCommand("open")).toBe("open");
     expect(widgetCommand("dial")).toBeNull();
     expect(widgetCommand(undefined)).toBeNull();
+  });
+});
+
+describe("chat notification", () => {
+  it("a chat notification carries only a clean «Mesaj de la …» and a thread id", () => {
+    // Clean.
+    expect(messageLabel("Mesaj de la Ana Popescu")).toBe("Mesaj de la Ana Popescu");
+    expect(messageLabel("  Mesaj de la Ana  ")).toBe("Mesaj de la Ana");
+    // Control characters become spaces.
+    expect(messageLabel("Mesaj de la Ana\nPopescu\u0007")).toBe("Mesaj de la Ana Popescu");
+    // Too long: cut at 80.
+    const long = messageLabel(`Mesaj de la ${"x".repeat(500)}`);
+    expect(long).toHaveLength(80);
+    expect(long?.startsWith("Mesaj de la x")).toBe(true);
+    // Wrong prefix, or the prefix with no name.
+    expect(messageLabel("Apel primit")).toBeNull();
+    expect(messageLabel("mesaj de la Ana")).toBeNull();
+    expect(messageLabel("Ana: Mesaj de la Ana")).toBeNull();
+    expect(messageLabel("Mesaj de la ")).toBeNull();
+    // Not a string.
+    expect(messageLabel(null)).toBeNull();
+    expect(messageLabel(42)).toBeNull();
+    expect(messageLabel({ toString: () => "Mesaj de la Ana" })).toBeNull();
+
+    // A ULID, as the gateway makes thread ids.
+    expect(threadIdOf("01JCDX9Z8K3M4N5P6Q7R8S9T0V")).toBe("01JCDX9Z8K3M4N5P6Q7R8S9T0V");
+    // Bad id: wrong length, lower case, letters outside Crockford base32, a Mongo ObjectId, a UUID, a path, not a string.
+    expect(threadIdOf("01JCDX9Z8K3M4N5P6Q7R8S9T0")).toBeNull();
+    expect(threadIdOf("01jcdx9z8k3m4n5p6q7r8s9t0v")).toBeNull();
+    expect(threadIdOf("01JCDX9Z8K3M4N5P6Q7R8S9TOU")).toBeNull();
+    expect(threadIdOf("507f1f77bcf86cd799439011")).toBeNull();
+    expect(threadIdOf("123e4567-e89b-12d3-a456-426614174000")).toBeNull();
+    expect(threadIdOf("../01JCDX9Z8K3M4N5P6Q7R8S9T0V")).toBeNull();
+    expect(threadIdOf(undefined)).toBeNull();
+    expect(threadIdOf(12345)).toBeNull();
   });
 });

@@ -108,6 +108,22 @@ export function ringLabel(value: unknown): string | null {
   return clean ? clean.slice(0, 120) : null;
 }
 
+/**
+ * The chat notification's title (task 8975b755): «Mesaj de la …», the
+ * sender's name only, never the words. One line, no control characters,
+ * bounded; anything else the page sends is null and shows nothing.
+ */
+export function messageLabel(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const clean = value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, 80).trim();
+  return clean.startsWith("Mesaj de la ") ? clean : null;
+}
+
+/** A chat thread's id as the gateway makes it: a ULID (oncall-api `src/lib/ulid.ts`, the same check as its `isUlid`). */
+export function threadIdOf(value: unknown): string | null {
+  return typeof value === "string" && /^[0-9A-HJKMNP-TV-Z]{26}$/.test(value) ? value : null;
+}
+
 /** The call widget's window (widget.ts): small enough to sit in a corner over other work. */
 export const WIDGET_SIZE = { width: 340, height: 148 } as const;
 
