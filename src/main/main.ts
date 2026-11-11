@@ -1,9 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, powerMonitor, session, type IpcMainEvent } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Notification, powerMonitor, session, type IpcMainEvent } from "electron";
 
 import { CallSignals, summon } from "./calls";
 import { installMenu } from "./menu";
 import { installPermissions } from "./permissions";
-import { appOriginOf, classify, DEFAULT_APP_URL, ringLabel, widgetCall, widgetCommand } from "./policy";
+import { appOriginOf, classify, DEFAULT_APP_URL, messageLabel, ringLabel, threadIdOf, widgetCall, widgetCommand } from "./policy";
 import { installTray } from "./tray";
 import { Updates } from "./updater";
 import { CallWidget } from "./widget";
@@ -24,6 +24,8 @@ const DOWNLOAD_PAGE = `${APP_ORIGIN}/aplicatie`;
 
 let mainWindow: BrowserWindow | null = null;
 let quitting = false;
+/** The last chat notification, held so it is not collected before its click arrives. */
+let chatNotification: Notification | null = null;
 const widget = new CallWidget({ url: `${APP_ORIGIN}/widget/apel`, main: () => mainWindow });
 const calls = new CallSignals(() => mainWindow, () => !widget.available);
 
@@ -70,6 +72,12 @@ function start(): void {
     mainWindow?.webContents.send("oncall:command", command);
   });
 
+  // A Supervisor's or an Admin's chat message while no OnCall window is in front: «Mesaj de la …», never the words.
+  ipcMain.on("oncall:message", (event, label: unknown, id: unknown) => {
+    if (!fromOncall(event)) return;
+    notifyMessage(messageLabel(label), threadIdOf(id));
+  });
+
   const updates = new Updates({ calls, downloadPage: DOWNLOAD_PAGE, beforeInstall: () => (quitting = true) });
   const checkForUpdates = () => void updates.check(true);
 
@@ -104,6 +112,26 @@ process.on("SIGTERM", quitNow);
 
 function show(): void {
   if (mainWindow) summon(mainWindow);
+}
+
+/** The chat notification; a click brings the main window (never the call widget) to the front, on the thread. */
+function notifyMessage(label: string | null, threadId: string | null): void {
+  if (!label || !threadId || BrowserWindow.getFocusedWindow() !== null) return;
+  if (process.platform === "win32") mainWindow?.flashFrame(true);
+  if (process.platform === "darwin") app.dock?.bounce("informational");
+  if (!Notification.isSupported()) return;
+  chatNotification?.close();
+  const notification = new Notification({ title: label });
+  notification.on("click", () => {
+    if (!mainWindow) return;
+    show();
+    mainWindow.webContents.send("oncall:open-chat", threadId);
+  });
+  notification.on("close", () => {
+    if (chatNotification === notification) chatNotification = null;
+  });
+  chatNotification = notification;
+  notification.show();
 }
 
 /** A message from an OnCall page; the sign-in on onsell.ro, an iframe or anything else does not count. */

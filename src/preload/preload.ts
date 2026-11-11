@@ -46,6 +46,16 @@ if (hello) {
       command(command: string): void {
         ipcRenderer.send("oncall:widget-command", command);
       },
+      /** A Supervisor's or an Admin's chat message: «Mesaj de la …» (the name only) and its thread, for a notification while OnCall is not in front. */
+      message(label: string, threadId: string): void {
+        ipcRenderer.send("oncall:message", typeof label === "string" ? label : null, typeof threadId === "string" ? threadId : null);
+      },
+      /** The chat notification was clicked: the thread to open. Returns the way to stop listening. */
+      onOpenChat(handler: (threadId: string) => void): () => void {
+        const listener = (_event: unknown, threadId: string) => handler(threadId);
+        ipcRenderer.on("oncall:open-chat", listener);
+        return () => ipcRenderer.removeListener("oncall:open-chat", listener);
+      },
     }),
   );
 }
