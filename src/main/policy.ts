@@ -179,3 +179,49 @@ export type WidgetCommand = "answer" | "hangup" | "mute" | "hold" | "open";
 export function widgetCommand(value: unknown): WidgetCommand | null {
   return value === "answer" || value === "hangup" || value === "mute" || value === "hold" || value === "open" ? value : null;
 }
+
+/** What the app asks of a window. Electron's throws "Object has been destroyed" on anything but isDestroyed() once closed. */
+export interface WindowLike {
+  isDestroyed(): boolean;
+  isVisible(): boolean;
+  isMinimized(): boolean;
+  isFocused(): boolean;
+}
+
+/** The window if it still exists; a closed one counts as none, and is not touched. */
+export function alive<T extends { isDestroyed(): boolean }>(win: T | null | undefined): T | null {
+  return win && !win.isDestroyed() ? win : null;
+}
+
+/** OnCall's window is in front: there, shown, not minimised and focused. */
+export function inFront(win: WindowLike | null | undefined): boolean {
+  const w = alive(win);
+  return Boolean(w && w.isVisible() && !w.isMinimized() && w.isFocused());
+}
+
+export type WidgetMove = "show" | "hide" | "none";
+
+/**
+ * The call widget: shown while there is a call and OnCall's window is not in
+ * front, hidden otherwise. Never shown once the app quits, not even for the
+ * call the quit has just ended: a window opened then would keep the app alive.
+ */
+export function widgetMove(input: { call: boolean; quitting: boolean; main: WindowLike | null; widget: WindowLike | null }): WidgetMove {
+  const widget = alive(input.widget);
+  const showing = Boolean(widget && widget.isVisible());
+  if (!input.quitting && input.call && !inFront(input.main)) return showing ? "none" : "show";
+  return showing ? "hide" : "none";
+}
+
+export type QuitStep = "proceed" | "ask" | "wait" | "force";
+
+/**
+ * A request to quit: Electron's own (`before-quit`) or ours («Ieși din OnCall»
+ * in the tray or the menu). In a call it asks first, and only once at a time;
+ * ours, after a quit that began and did not finish, forces it through.
+ */
+export function quitStep(input: { quitting: boolean; asking: boolean; inCall: boolean; request: "electron" | "ours" }): QuitStep {
+  if (input.quitting) return input.request === "ours" ? "force" : "proceed";
+  if (input.asking) return "wait";
+  return input.inCall ? "ask" : "proceed";
+}

@@ -11,7 +11,7 @@ const STATIC = path.join(__dirname, "..", "..", "static");
  * closed window, and the way to quit for real, since closing the window
  * leaves OnCall running.
  */
-export function installTray(actions: { show(): void; checkForUpdates(): void; calls: CallSignals }): Tray {
+export function installTray(actions: { show(): void; quit(): void; checkForUpdates(): void; calls: CallSignals }): Tray {
   const mac = process.platform === "darwin";
   // macOS: a template image, which the menu bar tints for light and dark. Windows: the coloured mark.
   const image = nativeImage.createFromPath(path.join(STATIC, mac ? "trayTemplate.png" : "tray.png"));
@@ -29,7 +29,7 @@ export function installTray(actions: { show(): void; checkForUpdates(): void; ca
         { label: `Versiunea ${app.getVersion()}`, enabled: false },
         { label: "Caută actualizări…", click: actions.checkForUpdates },
         { type: "separator" },
-        { label: "Ieși din OnCall", click: () => app.quit() },
+        { label: "Ieși din OnCall", click: actions.quit },
       ]),
     );
   };

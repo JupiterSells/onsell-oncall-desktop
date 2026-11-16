@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { app, BrowserWindow, screen, type WebContents } from "electron";
 
-import { WIDGET_SIZE, widgetPosition, type WidgetCall } from "./policy";
+import { alive, WIDGET_SIZE, widgetMove, widgetPosition, type WidgetCall } from "./policy";
 import { webPreferences } from "./window";
 
 /**
@@ -16,7 +16,9 @@ import { webPreferences } from "./window";
  *
  * Shown while there is something to show (a call ringing, dialled, up or
  * just ended, or a result still owed) and OnCall's window is not focused;
- * hidden as soon as it is. It never takes the focus by appearing.
+ * hidden as soon as it is. It never takes the focus by appearing. Once the
+ * app quits it never opens again and is the first to go: a window opened
+ * during the quit would keep OnCall running.
  */
 export class CallWidget {
   private win: BrowserWindow | null = null;
@@ -24,7 +26,7 @@ export class CallWidget {
   /** The page in the main window has spoken since it loaded (web app with the widget, not an older one). */
   private pageHasWidget = false;
 
-  constructor(private readonly options: { url: string; main(): BrowserWindow | null }) {}
+  constructor(private readonly options: { url: string; main(): BrowserWindow | null; quitting(): boolean }) {}
 
   /** Whether a ring can rely on the widget instead of pulling OnCall's window over the operator's work. */
   get available(): boolean {
@@ -57,14 +59,17 @@ export class CallWidget {
 
   /** Main window focus changed, or the call did: show or hide. */
   refresh(): void {
-    const main = this.options.main();
-    const mainInFront = Boolean(main && main.isVisible() && !main.isMinimized() && main.isFocused());
-    if (this.state && !mainInFront) {
-      const win = this.window();
-      if (!win.isVisible()) win.showInactive();
-    } else if (this.win && !this.win.isDestroyed() && this.win.isVisible()) {
-      this.win.hide();
-    }
+    const move = widgetMove({ call: this.state !== null, quitting: this.options.quitting(), main: this.options.main(), widget: this.win });
+    if (move === "show") this.window().showInactive();
+    else if (move === "hide") alive(this.win)?.hide();
+  }
+
+  /** The app quits: the widget goes for good, before anything else (destroyed: nothing can hold it open). */
+  close(): void {
+    this.state = null;
+    const win = alive(this.win);
+    this.win = null;
+    win?.destroy();
   }
 
   private send(): void {

@@ -3,7 +3,7 @@ import { app, BrowserWindow, dialog, ipcMain, Notification, powerMonitor, sessio
 import { CallSignals, summon } from "./calls";
 import { installMenu } from "./menu";
 import { installPermissions } from "./permissions";
-import { appOriginOf, classify, DEFAULT_APP_URL, messageLabel, ringLabel, threadIdOf, widgetCall, widgetCommand } from "./policy";
+import { alive, appOriginOf, classify, DEFAULT_APP_URL, inFront, messageLabel, quitStep, ringLabel, threadIdOf, widgetCall, widgetCommand } from "./policy";
 import { installTray } from "./tray";
 import { Updates } from "./updater";
 import { CallWidget } from "./widget";
@@ -22,12 +22,15 @@ const APP_URL = !app.isPackaged && process.env.ONCALL_URL ? process.env.ONCALL_U
 const APP_ORIGIN = appOriginOf(APP_URL);
 const DOWNLOAD_PAGE = `${APP_ORIGIN}/aplicatie`;
 
+/** OnCall's window; null once it is closed for real (a quit), never a destroyed one. */
 let mainWindow: BrowserWindow | null = null;
 let quitting = false;
+/** The «Ești într-un apel» question is open. */
+let asking = false;
 /** The last chat notification, held so it is not collected before its click arrives. */
 let chatNotification: Notification | null = null;
-const widget = new CallWidget({ url: `${APP_ORIGIN}/widget/apel`, main: () => mainWindow });
-const calls = new CallSignals(() => mainWindow, () => !widget.available);
+const widget = new CallWidget({ url: `${APP_ORIGIN}/widget/apel`, main: () => alive(mainWindow), quitting: () => quitting });
+const calls = new CallSignals(() => alive(mainWindow), () => !widget.available);
 
 app.setAppUserModelId("ro.onsell.oncall");
 // A developer's run against another OnCall keeps its own sign-in and lock, apart from the installed app's.
@@ -60,7 +63,7 @@ function start(): void {
   });
   // The call widget: the call from the main window's softphone, the buttons from the widget, each only from its own window.
   ipcMain.on("oncall:call-update", (event, state: unknown) => {
-    if (fromOncall(event) && event.sender === mainWindow?.webContents) widget.update(widgetCall(state));
+    if (fromOncall(event) && event.sender === alive(mainWindow)?.webContents) widget.update(widgetCall(state));
   });
   ipcMain.on("oncall:widget-ready", (event) => {
     if (fromOncall(event) && widget.owns(event.sender)) widget.ready();
@@ -69,7 +72,7 @@ function start(): void {
     const command = widgetCommand(value);
     if (!command || !fromOncall(event) || !widget.owns(event.sender)) return;
     if (command === "open") show();
-    mainWindow?.webContents.send("oncall:command", command);
+    alive(mainWindow)?.webContents.send("oncall:command", command);
   });
 
   // A Supervisor's or an Admin's chat message while no OnCall window is in front: «Mesaj de la …», never the words.
@@ -78,10 +81,22 @@ function start(): void {
     notifyMessage(messageLabel(label), threadIdOf(id));
   });
 
-  const updates = new Updates({ calls, downloadPage: DOWNLOAD_PAGE, beforeInstall: () => (quitting = true) });
+  const updates = new Updates({ calls, downloadPage: DOWNLOAD_PAGE, beforeInstall: beginQuit });
   const checkForUpdates = () => void updates.check(true);
 
-  mainWindow = createMainWindow({
+  openMainWindow();
+  installMenu({ window: () => alive(mainWindow), calls, home: `${APP_ORIGIN}/`, downloadPage: DOWNLOAD_PAGE, checkForUpdates, quit: requestQuit });
+  installTray({ show, quit: requestQuit, checkForUpdates, calls });
+  updates.start();
+
+  // macOS: the Dock icon of an app whose window is hidden.
+  app.on("activate", show);
+  powerMonitor.on("shutdown", quitNow);
+}
+
+/** OnCall's window, at start or again when it was closed while the app kept running. */
+function openMainWindow(): BrowserWindow {
+  const win = createMainWindow({
     appUrl: APP_URL,
     appOrigin: APP_ORIGIN,
     quitting: () => quitting,
@@ -90,44 +105,69 @@ function start(): void {
       widget.reset();
     },
   });
-  for (const change of ["focus", "blur", "show", "hide", "minimize", "restore"] as const) mainWindow.on(change as "focus", () => widget.refresh());
-  installMenu({ window: () => mainWindow, calls, home: `${APP_ORIGIN}/`, downloadPage: DOWNLOAD_PAGE, checkForUpdates });
-  installTray({ show, checkForUpdates, calls });
-  updates.start();
-
-  // macOS: the Dock icon of an app whose window is hidden.
-  app.on("activate", show);
-
+  for (const change of ["focus", "blur", "show", "hide", "minimize", "restore"] as const) win.on(change as "focus", () => widget.refresh());
   // The system is shutting down or logging off: the window closes instead of hiding, or it would hold that up.
-  mainWindow.on("session-end", () => (quitting = true));
-  powerMonitor.on("shutdown", quitNow);
+  win.on("session-end", beginQuit);
+  // Closed for real: forgotten, so nothing reaches for a destroyed window («Object has been destroyed»).
+  win.on("closed", () => {
+    if (mainWindow === win) mainWindow = null;
+    widget.refresh();
+  });
+  mainWindow = win;
+  return win;
+}
+
+/** The quit has begun: from here the call widget never opens again, and it goes first. */
+function beginQuit(): void {
+  quitting = true;
+  widget.close();
 }
 
 function quitNow(): void {
-  quitting = true;
+  beginQuit();
   app.quit();
 }
 
 process.on("SIGTERM", quitNow);
 
+/**
+ * «Ieși din OnCall» in the tray or the menu. Normally Electron's quit (which
+ * asks first in a call, below). When a quit already began and did not finish,
+ * Electron ignores another one: every window goes, which lets it finish, and
+ * if the app is somehow still here a moment later, it stops.
+ */
+function requestQuit(): void {
+  if (quitStep({ quitting, asking, inCall: calls.inCall, request: "ours" }) !== "force") {
+    app.quit();
+    return;
+  }
+  widget.close();
+  for (const win of BrowserWindow.getAllWindows()) if (!win.isDestroyed()) win.destroy();
+  app.quit();
+  setTimeout(() => app.exit(0), 3000).unref();
+}
+
+/** OnCall's window to the front; opened again if it was closed. */
 function show(): void {
-  if (mainWindow) summon(mainWindow);
+  const win = alive(mainWindow);
+  // A new window shows itself once its page is ready (createMainWindow), without a blank frame first.
+  if (win) summon(win);
+  else openMainWindow();
 }
 
 /** The chat notification; a click brings the main window (never the call widget) to the front, on the thread. */
 function notifyMessage(label: string | null, threadId: string | null): void {
   if (!label || !threadId) return;
   // «In front» means the main window itself, as the call widget counts it: a focused widget is not OnCall's page.
-  if (mainWindow && mainWindow.isVisible() && !mainWindow.isMinimized() && mainWindow.isFocused()) return;
-  if (process.platform === "win32") mainWindow?.flashFrame(true);
+  if (inFront(mainWindow)) return;
+  if (process.platform === "win32") alive(mainWindow)?.flashFrame(true);
   if (process.platform === "darwin") app.dock?.bounce("informational");
   if (!Notification.isSupported()) return;
   chatNotification?.close();
   const notification = new Notification({ title: label });
   notification.on("click", () => {
-    if (!mainWindow) return;
     show();
-    mainWindow.webContents.send("oncall:open-chat", threadId);
+    alive(mainWindow)?.webContents.send("oncall:open-chat", threadId);
   });
   notification.on("close", () => {
     if (chatNotification === notification) chatNotification = null;
@@ -144,26 +184,31 @@ function fromOncall(event: IpcMainEvent): boolean {
 
 // Quitting ends the call in progress: in a call, it asks first.
 app.on("before-quit", (event) => {
-  if (quitting) return;
-  if (calls.inCall) {
-    event.preventDefault();
-    void dialog
-      .showMessageBox({
-        type: "warning",
-        message: "Ești într-un apel.",
-        detail: "Dacă ieși din OnCall, apelul se închide.",
-        buttons: ["Ieși oricum", "Rămân în apel"],
-        defaultId: 1,
-        cancelId: 1,
-      })
-      .then(({ response }) => {
-        if (response !== 0) return;
-        quitting = true;
-        app.quit();
-      });
+  const step = quitStep({ quitting, asking, inCall: calls.inCall, request: "electron" });
+  if (step === "proceed") {
+    beginQuit();
     return;
   }
-  quitting = true;
+  event.preventDefault();
+  // The question is already open: no second one.
+  if (step === "wait") return;
+  asking = true;
+  void dialog
+    .showMessageBox({
+      type: "warning",
+      message: "Ești într-un apel.",
+      detail: "Dacă ieși din OnCall, apelul se închide.",
+      buttons: ["Ieși oricum", "Rămân în apel"],
+      defaultId: 1,
+      cancelId: 1,
+    })
+    .finally(() => (asking = false))
+    .then(({ response }) => {
+      if (response !== 0) return;
+      // The widget goes before the call's end can bring it back, then everything else.
+      beginQuit();
+      app.quit();
+    });
 });
 
 // The window is only ever hidden, so this fires on quit; nothing keeps the app alive past it.

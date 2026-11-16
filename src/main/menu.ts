@@ -8,6 +8,8 @@ export interface MenuActions {
   home: string;
   downloadPage: string;
   checkForUpdates(): void;
+  /** «Ieși din OnCall»: the app's own quit, which also gets through a quit that stalled. */
+  quit(): void;
 }
 
 /**
@@ -18,6 +20,7 @@ export interface MenuActions {
 export function installMenu(actions: MenuActions): void {
   const mac = process.platform === "darwin";
   const contents = () => actions.window()?.webContents ?? null;
+  const quit: MenuItemConstructorOptions = { label: "Ieși din OnCall", accelerator: mac ? "Cmd+Q" : undefined, click: () => actions.quit() };
 
   const reload = async (hard: boolean) => {
     const win = actions.window();
@@ -61,10 +64,10 @@ export function installMenu(actions: MenuActions): void {
             { role: "hideOthers", label: "Ascunde celelalte" },
             { role: "unhide", label: "Arată tot" },
             { type: "separator" },
-            { role: "quit", label: "Ieși din OnCall" },
+            quit,
           ],
         }
-      : { label: "OnCall", submenu: [...appItems, { type: "separator" }, { role: "quit", label: "Ieși din OnCall" }] },
+      : { label: "OnCall", submenu: [...appItems, { type: "separator" }, quit] },
     {
       label: "Editare",
       submenu: [

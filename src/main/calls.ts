@@ -90,6 +90,7 @@ export class CallSignals {
 
 /** The window to the front, over whatever the operator has open. */
 export function summon(win: BrowserWindow): void {
+  if (win.isDestroyed()) return;
   if (win.isMinimized()) win.restore();
   if (!win.isVisible()) win.show();
   if (process.platform === "win32") {
