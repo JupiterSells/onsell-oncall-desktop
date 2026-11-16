@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { appOriginOf, classify, messageLabel, restoreBounds, ringLabel, threadIdOf, updateMode, widgetCall, widgetCommand, widgetPosition } from "./policy";
+import { alive, appOriginOf, classify, messageLabel, inFront, quitStep, restoreBounds, ringLabel, threadIdOf, updateMode, widgetCall, widgetCommand, widgetMove, widgetPosition } from "./policy";
 
 const ORIGIN = "https://call.onsell.ro";
 
@@ -184,5 +184,101 @@ describe("chat notification", () => {
     expect(threadIdOf("../01JCDX9Z8K3M4N5P6Q7R8S9T0V")).toBeNull();
     expect(threadIdOf(undefined)).toBeNull();
     expect(threadIdOf(12345)).toBeNull();
+  });
+});
+
+/** A window like Electron's: once destroyed, everything but isDestroyed() throws. */
+function win(state: { destroyed?: boolean; visible?: boolean; minimized?: boolean; focused?: boolean } = {}) {
+  const { destroyed = false, visible = true, minimized = false, focused = true } = state;
+  const live = <T>(value: T) => () => {
+    if (destroyed) throw new TypeError("Object has been destroyed");
+    return value;
+  };
+  return { isDestroyed: () => destroyed, isVisible: live(visible), isMinimized: live(minimized), isFocused: live(focused) };
+}
+
+describe("alive and inFront", () => {
+  it("a destroyed window counts as gone, without being touched", () => {
+    expect(alive(win({ destroyed: true }))).toBeNull();
+  });
+
+  it("a window that exists is returned as it is, and nothing is returned for none", () => {
+    const open = win();
+    expect(alive(open)).toBe(open);
+    expect(alive(null)).toBeNull();
+    expect(alive(undefined)).toBeNull();
+  });
+
+  it("a destroyed main window is not in front", () => {
+    expect(inFront(win({ destroyed: true }))).toBe(false);
+    expect(inFront(null)).toBe(false);
+  });
+
+  it("the main window is in front only when visible, not minimised and focused", () => {
+    expect(inFront(win())).toBe(true);
+    expect(inFront(win({ visible: false }))).toBe(false);
+    expect(inFront(win({ minimized: true }))).toBe(false);
+    expect(inFront(win({ focused: false }))).toBe(false);
+  });
+});
+
+describe("widgetMove", () => {
+  it("the widget never opens while the app quits, even for the call that just ended", () => {
+    expect(widgetMove({ call: true, quitting: true, main: null, widget: null })).toBe("none");
+    expect(widgetMove({ call: true, quitting: true, main: win({ focused: false }), widget: win({ destroyed: true }) })).toBe("none");
+  });
+
+  it("a widget still visible when the quit begins is hidden", () => {
+    expect(widgetMove({ call: true, quitting: true, main: null, widget: win({ visible: true }) })).toBe("hide");
+  });
+
+  it("a call shows the widget while the main window is gone", () => {
+    expect(widgetMove({ call: true, quitting: false, main: null, widget: null })).toBe("show");
+    expect(widgetMove({ call: true, quitting: false, main: win({ destroyed: true }), widget: null })).toBe("show");
+  });
+
+  it("a call shows the widget while the main window is behind", () => {
+    expect(widgetMove({ call: true, quitting: false, main: win({ focused: false }), widget: null })).toBe("show");
+    expect(widgetMove({ call: true, quitting: false, main: win({ minimized: true }), widget: win({ visible: false }) })).toBe("show");
+  });
+
+  it("a widget already showing is left alone while the main window stays behind", () => {
+    expect(widgetMove({ call: true, quitting: false, main: win({ focused: false }), widget: win({ visible: true }) })).toBe("none");
+  });
+
+  it("the widget hides when the main window is in front", () => {
+    expect(widgetMove({ call: true, quitting: false, main: win(), widget: win({ visible: true }) })).toBe("hide");
+  });
+
+  it("with no call the widget hides if it is showing, and nothing happens if there is none", () => {
+    expect(widgetMove({ call: false, quitting: false, main: null, widget: win({ visible: true }) })).toBe("hide");
+    expect(widgetMove({ call: false, quitting: false, main: null, widget: null })).toBe("none");
+    expect(widgetMove({ call: false, quitting: false, main: null, widget: win({ visible: false }) })).toBe("none");
+  });
+});
+
+describe("quitStep", () => {
+  it("a quit during a call asks first", () => {
+    expect(quitStep({ quitting: false, asking: false, inCall: true, request: "electron" })).toBe("ask");
+    expect(quitStep({ quitting: false, asking: false, inCall: true, request: "ours" })).toBe("ask");
+  });
+
+  it("a second quit while the question is open opens no second dialog", () => {
+    expect(quitStep({ quitting: false, asking: true, inCall: true, request: "ours" })).toBe("wait");
+    expect(quitStep({ quitting: false, asking: true, inCall: true, request: "electron" })).toBe("wait");
+  });
+
+  it("a quit with no call goes ahead", () => {
+    expect(quitStep({ quitting: false, asking: false, inCall: false, request: "electron" })).toBe("proceed");
+    expect(quitStep({ quitting: false, asking: false, inCall: false, request: "ours" })).toBe("proceed");
+  });
+
+  it("«Ieși din OnCall» after a quit that did not finish forces it through", () => {
+    expect(quitStep({ quitting: true, asking: false, inCall: true, request: "ours" })).toBe("force");
+    expect(quitStep({ quitting: true, asking: false, inCall: false, request: "ours" })).toBe("force");
+  });
+
+  it("Electron's own quit after «Ieși oricum» goes ahead without asking again", () => {
+    expect(quitStep({ quitting: true, asking: false, inCall: true, request: "electron" })).toBe("proceed");
   });
 });
