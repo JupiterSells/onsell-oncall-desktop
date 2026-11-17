@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { app, BrowserWindow, screen, type WebContents } from "electron";
+import { app, BrowserWindow, nativeTheme, screen, type WebContents } from "electron";
 
-import { alive, WIDGET_SIZE, widgetMove, widgetPosition, type WidgetCall } from "./policy";
+import { alive, WIDGET_SIZE, widgetMove, widgetPosition, windowBackground, type WidgetCall } from "./policy";
 import { webPreferences } from "./window";
 
 /**
@@ -93,7 +93,7 @@ export class CallWidget {
       skipTaskbar: true,
       alwaysOnTop: true,
       title: "OnCall · apel",
-      backgroundColor: "#ffffff",
+      backgroundColor: windowBackground(nativeTheme.shouldUseDarkColors),
       webPreferences: webPreferences(),
     });
     // Above ordinary windows, on every desktop / Space the operator switches to.

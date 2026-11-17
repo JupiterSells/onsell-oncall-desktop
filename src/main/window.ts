@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { app, BrowserWindow, clipboard, Menu, screen, shell, type MenuItemConstructorOptions, type WebContents, type WebPreferences } from "electron";
+import { app, BrowserWindow, clipboard, Menu, nativeTheme, screen, shell, type MenuItemConstructorOptions, type WebContents, type WebPreferences } from "electron";
 
-import { classify, DEFAULT_SIZE, MIN_SIZE, restoreBounds, type WindowState } from "./policy";
+import { classify, DEFAULT_SIZE, MIN_SIZE, restoreBounds, windowBackground, type WindowState } from "./policy";
 
 /** One session for every OnCall window, kept on disk: the sign-in survives a restart as it would in a browser. */
 export const PARTITION = "persist:oncall";
@@ -110,7 +110,7 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
     show: false,
     title: "OnCall",
     icon: WINDOW_ICON,
-    backgroundColor: "#ffffff",
+    backgroundColor: windowBackground(nativeTheme.shouldUseDarkColors),
     autoHideMenuBar: true,
     webPreferences: webPreferences(),
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { alive, appOriginOf, classify, messageLabel, inFront, quitStep, restoreBounds, ringLabel, threadIdOf, updateMode, widgetCall, widgetCommand, widgetMove, widgetPosition } from "./policy";
+import { alive, appOriginOf, classify, messageLabel, inFront, quitStep, restoreBounds, ringLabel, threadIdOf, updateMode, widgetCall, widgetCommand, widgetMove, widgetPosition, windowBackground } from "./policy";
 
 const ORIGIN = "https://call.onsell.ro";
 
@@ -280,5 +280,12 @@ describe("quitStep", () => {
 
   it("Electron's own quit after «Ieși oricum» goes ahead without asking again", () => {
     expect(quitStep({ quitting: true, asking: false, inCall: true, request: "electron" })).toBe("proceed");
+  });
+});
+
+describe("windowBackground", () => {
+  it("follows the computer's light or dark setting, never a white flash in dark", () => {
+    expect(windowBackground(true)).toBe("#060A1F");
+    expect(windowBackground(false)).toBe("#EEF2F8");
   });
 });

@@ -225,3 +225,11 @@ export function quitStep(input: { quitting: boolean; asking: boolean; inCall: bo
   if (input.asking) return "wait";
   return input.inCall ? "ask" : "proceed";
 }
+
+/**
+ * The window's colour before the page paints (feedback b41c1b4c): the OnCall page background of the theme the
+ * computer is set to, so a dark computer never sees a white flash. Same values as oncall/web's `--background`.
+ */
+export function windowBackground(dark: boolean): string {
+  return dark ? "#060A1F" : "#EEF2F8";
+}
