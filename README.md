@@ -55,7 +55,7 @@ npm version patch      # or minor / major
 git push --follow-tags
 ```
 
-The tag starts `.github/workflows/release.yml`: tests, a draft release, the macOS (universal DMG + zip) and Windows (NSIS) builds uploaded to it, then the release is published. Installed apps see it within four hours, or at once from «Caută actualizări…».
+Until 20 Nov 2026 the tag started `.github/workflows/release.yml` on GitHub's macOS and Windows runners: tests, a draft release, the macOS (universal DMG + zip) and Windows (NSIS) builds uploaded to it, then the release published. The org's Actions jobs are refused (billing), so that workflow and `ci.yml` were removed; both are in git history (the commit before "ci: remove the GitHub Actions workflows"). Until a new build route exists, a release is built by hand on a Mac (`npm ci && npx vitest run`, then electron-builder for mac and win as release.yml did) and its files are attached to the GitHub release of the tag. Installed apps see a published release within four hours, or at once from «Caută actualizări…».
 
 ## Signing
 
@@ -64,4 +64,4 @@ The builds are **not signed yet**. Until they are:
 - **macOS**: the first open is refused by Gatekeeper. Right-click the app in Applications → Open, or System Settings → Privacy & Security → «Open Anyway». After that it updates itself (mac-update.ts) as long as it runs from a folder the account can write (Applications on an admin account); otherwise it says why and opens the download page. macOS may ask for the microphone again after an update, since an ad-hoc signature changes with every build.
 - **Windows**: SmartScreen says «Windows protected your PC» → More info → Run anyway. Updates install themselves.
 
-Signing turns on by adding the repo secrets listed at the top of `release.yml` (an Apple Developer ID Application certificate plus notarisation credentials; a Windows code-signing certificate). Nothing else changes: the next tag is signed, and signed Macs update themselves.
+Signing turns on by adding the secrets listed at the top of `release.yml` (in git history) (an Apple Developer ID Application certificate plus notarisation credentials; a Windows code-signing certificate). Nothing else changes: the next tag is signed, and signed Macs update themselves.

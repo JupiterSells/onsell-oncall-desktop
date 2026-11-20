@@ -147,7 +147,7 @@ export class Updates {
 /**
  * Whether this macOS build was signed with a Developer ID. The release
  * workflow sets `oncallSignedMac` in the packaged package.json only when it
- * had the certificate (see .github/workflows/release.yml).
+ * had the certificate (see .github/workflows/release.yml, removed 20 Nov 2026, in git history).
  */
 function signedMac(): boolean {
   try {
